@@ -1,0 +1,95 @@
+---
+- name: Ensure Jenkins CM repo is installed.
+  get_url:
+    url: https://downloads.cloudbees.com/cloudbees-core/traditional/client-master/rolling/rpm/cloudbees-core-cm.repo
+    dest: /etc/yum.repos.d/cloudbees-core-cm.repo
+  #when: https://downloads.cloudbees.com/cloudbees-core/traditional/operations-center/rolling/rpm/cloudbees-core-oc.repo | default(false)
+- name: Add Jenkins CM repo GPG key.
+  rpm_key:
+    state: present
+    key: https://downloads.cloudbees.com/cloudbees-core/traditional/client-master/rolling/rpm/cloudbees.com.key
+  #when: https://downloads.cloudbees.com/jenkins-operations-center/rolling/rpm/cloudbees.com.key | default('false') == trueˀ
+
+- name: upgrade all packages
+  yum: name=* state=latest
+
+- name: Install Jenkins operation center
+  yum: 
+    name: cloudbees-core-oc
+    state: latest
+
+- name: Restart service Jenkins Client master in all cases
+  service:
+    name: cloudbees-core-cm
+    state: restarted
+
+- name: Ensure Jenkins is installed.
+  package:
+    name: cloudbees-core-cm
+    state: present
+- name: Create directory and manage permission(or create it if it doesn't exist)
+  file:
+    path: /var/lib/cloudbees-core-cm
+    state: directory
+    owner: cloudbees-core-cm
+    group: cloudbees-core-cm
+    mode: 0755
+
+- name: Ensure jenkins_home /var/lib/cloudbees-core-cm exists.
+  file:
+    path: /var/lib/cloudbees-core-cm
+    state: directory
+    owner: cloudbees-core-cm
+    group: cloudbees-core-cm
+    mode: u+rwx
+    follow: true
+
+  ##Intial admin password
+- name: Get Jenkins CM admin password from file.
+  slurp:
+    src: /var/lib/cloudbees-core-cm/secrets/initialAdminPassword
+  register: adminpasswordfile_cm
+  no_log: true
+  #when: jenkins_admin_password_file | default(false)
+  tags: ['skip_ansible_lint']
+
+#- name: Set Jenkins admin password fact.
+  #set_fact:
+    #cm_admin_password: "{{ adminpasswordfile['stdout'] | default(cm_admin_password_cm) }}"
+  #no_log: true
+  #register: cm_admin_password
+  #debug:
+    #msg: "{{ cm_admin_password }} "
+
+- name: Ensure Jenkins CM is up
+  uri:
+    url: "http://0.0.0.0:8080/"
+    method: GET
+    return_content: "yes"
+    timeout: 5
+    body_format: raw
+    follow_redirects: "no"
+    status_code: 200,403
+  register: result
+  until: (result.status == 403 or result.status == 200) and (result.content.find("Please wait while") == -1)
+  retries: 20
+  delay: 5
+  changed_when: false
+  check_mode: false
+
+#- name: Get the jenkins-cli jarfile from the Jenkins server.
+#  get_url:
+#    url: "http://0.0.0.0:8888/jnlpJars/jenkins-cli.jar"
+#    dest: /opt/jenkins-cli.jar
+#  register: jarfile_get
+#  until: "'OK' in jarfile_get.msg or '304' in jarfile_get.msg or 'file already exists' in jarfile_get.msg"
+#  retries: 5
+#  delay: 10
+#  check_mode: false
+
+- name: Calling Script for Creating Client master
+  jenkins_script:
+    script: "{{ addClientMaster.groovy }}"
+    url: http://0.0.0.0:8888
+    user: admin
+    password: admin123

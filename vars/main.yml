@@ -1,0 +1,7 @@
+---
+# vars file for cloudbees-jenkins
+
+jenkins_repo_url: https://downloads.cloudbees.com/cloudbees-core/traditional/operations-center/rolling/rpm/cloudbees-core-oc.repo
+jenkins_repo_key_url: https://downloads.cloudbees.com/jenkins-operations-center/rolling/rpm/cloudbees.com.key
+oc_admin_password: admin
+cm_admin_password: admin

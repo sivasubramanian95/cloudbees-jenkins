@@ -1,0 +1,78 @@
+---
+- name: Ensure Jenkins repo is installed.
+      get_url:
+        url: https://downloads.cloudbees.com/cloudbees-core/traditional/operations-center/rolling/rpm/cloudbees-core-oc.repo
+        dest: /etc/yum.repos.d/cloudbees-core-oc.repo
+      #when: https://downloads.cloudbees.com/cloudbees-core/traditional/operations-center/rolling/rpm/cloudbees-core-oc.repo | default(false)
+    - name: Add Jenkins repo GPG key.
+      rpm_key:
+        state: present
+        key: https://downloads.cloudbees.com/jenkins-operations-center/rolling/rpm/cloudbees.com.key
+      #when: https://downloads.cloudbees.com/jenkins-operations-center/rolling/rpm/cloudbees.com.key | default('false') == trueˀ
+
+    - name: upgrade all packages
+      yum: name=* state=latest
+
+    - name: Install Jenkins operation center
+      yum: 
+        name: cloudbees-core-oc
+        state: latest
+
+    - name: Restart service Jenkins OC, in all cases
+      service:
+        name: cloudbees-core-oc
+        state: restarted
+
+    - name: Ensure Jenkins is installed.
+      package:
+        name: cloudbees-core-oc
+        state: present
+
+    - name: Create directory and manage permission(or create it if it doesn't exist)
+      file:
+        path: /var/lib/cloudbees-core-oc
+        state: directory
+        owner: cloudbees-core-oc
+        group: cloudbees-core-oc
+        mode: 0755    
+    - name: Ensure jenkins_home /var/lib/cloudbees-core-oc exists.
+      file:
+        path: /var/lib/cloudbees-core-oc
+        state: directory
+        owner: cloudbees-core-oc
+        group: cloudbees-core-oc
+        mode: u+rwx
+        follow: true
+
+    ##Intial admin password
+    - name: Get Jenkins OC admin password from file.
+      slurp:
+        src: /var/lib/cloudbees-core-oc/secrets/initialAdminPassword
+      register: adminpasswordfile_oc
+      #no_log: true
+      #when: jenkins_admin_password_file | default(false)
+      tags: ['skip_ansible_lint']
+
+    #- name: Set Jenkins admin password fact.
+      #set_fact:
+        #oc_admin_password: "{{ adminpasswordfile_oc['stdout'] | default(oc_admin_password) }}"
+      #register: oc_admin_password
+      #no_log: true
+      #debug:
+        #msg: "{{ oc_admin_password }}"
+
+    - name: Ensure Jenkins OC is up
+      uri:
+        url: "http://0.0.0.0:8888/"
+        method: GET
+        return_content: "yes"
+        timeout: 5
+        body_format: raw
+        follow_redirects: "no"
+        status_code: 200,403
+      register: result
+      until: (result.status == 403 or result.status == 200) and (result.content.find("Please wait while") == -1)
+      retries: 20
+      delay: 5
+      changed_when: false
+      check_mode: false
